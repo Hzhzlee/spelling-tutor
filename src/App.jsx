@@ -1,30 +1,26 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { MAX_ITEMS, chunkItem, parseItems, shuffle } from "./text.js";
-import { pickVoice, speak, speechSupported, stopSpeaking, useVoices } from "./speech.js";
+import { useState } from "react";
+import { MAX_ITEMS, detectLang, shuffle, uid } from "./text.js";
+import { pickVoice, speechSupported, stopSpeaking, useVoices } from "./speech.js";
+import { useStored } from "./storage.js";
+import Setup from "./Setup.jsx";
+import Practice from "./Practice.jsx";
+import Results from "./Results.jsx";
 
-const RATES = { slow: 0.8, normal: 1 };
+const DEFAULT_SETTINGS = { rate: 0.85, order: "sequence" };
 
 export default function App() {
   const voices = useVoices();
-  const [phase, setPhase] = useState("input"); // input | spell | reveal
-  const [raw, setRaw] = useState("");
-  const [lang, setLang] = useState("en");
-  const [order, setOrder] = useState("sequence");
-  const [rateKey, setRateKey] = useState("slow");
-  const [session, setSession] = useState({ items: [], lang: "en" });
-  const [lastRead, setLastRead] = useState(-1);
+  const [lists, setLists] = useStored("spellwise.lists.v1", []);
+  const [queue, setQueue] = useStored("spellwise.queue.v1", []);
+  const [settings, setSettings] = useStored("spellwise.settings.v1", DEFAULT_SETTINGS);
+  const [phase, setPhase] = useState("setup"); // setup | practice | results
+  const [session, setSession] = useState(null);
   const [error, setError] = useState("");
 
-  const parsed = useMemo(() => parseItems(raw), [raw]);
-  const langCode = lang === "en" ? "en" : "zh-CN";
-  const voiceMissing =
-    !speechSupported || (voices.length > 0 && !pickVoice(voices, langCode));
-  const noVoicesLoaded = speechSupported && voices.length === 0;
-
-  const start = () => {
+  const start = (texts) => {
     setError("");
-    if (parsed.length === 0) return;
-    if (parsed.length > MAX_ITEMS) {
+    if (texts.length === 0) return;
+    if (texts.length > MAX_ITEMS) {
       setError(`Please keep the list to ${MAX_ITEMS} items or fewer.`);
       return;
     }
@@ -32,216 +28,90 @@ export default function App() {
       setError("This browser cannot read text aloud. Try Chrome, Edge or Safari.");
       return;
     }
-    if (voiceMissing) {
-      setError(
-        `No ${lang === "en" ? "English" : "Chinese (Simplified)"} voice is installed on this device.`
-      );
-      return;
-    }
-    if (noVoicesLoaded) {
+    if (voices.length === 0) {
       setError("Voices are still loading. Please try again in a moment.");
       return;
     }
-    const items = order === "random" ? shuffle(parsed) : parsed;
-    setSession({ items, lang: langCode });
-    setLastRead(0);
-    setPhase("spell");
+    const items = texts.map((text) => ({ id: uid(), text, lang: detectLang(text) }));
+    const missing = [...new Set(items.map((i) => i.lang))].filter((l) => !pickVoice(voices, l));
+    if (missing.length > 0) {
+      const names = missing.map((l) => (l === "zh-CN" ? "Chinese (Simplified)" : "English"));
+      setError(`No ${names.join(" or ")} voice is installed on this device.`);
+      return;
+    }
+    setSession({
+      items: settings.order === "random" ? shuffle(items) : items,
+      lastRead: 0,
+      seconds: 0,
+    });
+    setPhase("practice");
   };
 
-  const finish = (maxReached) => {
+  const finish = (lastRead, seconds) => {
     stopSpeaking();
-    setLastRead(maxReached);
-    setPhase("reveal");
+    setSession((s) => ({ ...s, lastRead, seconds }));
+    setPhase("results");
   };
 
-  const again = () => {
+  const backToSetup = () => {
     stopSpeaking();
-    setPhase("input");
+    setPhase("setup");
   };
 
   return (
-    <main className="app">
-      <h1>Spelling Tutor</h1>
+    <div className="shell">
+      <header className="top">
+        <div className="brand">
+          <span className="logo" aria-hidden="true">S</span>
+          SpellWise
+        </div>
+        <span className="crumb">
+          {phase === "setup" && "Dictation · Spelling list"}
+          {phase === "practice" && "Dictation · Practice"}
+          {phase === "results" && "Dictation · Results"}
+        </span>
+      </header>
 
-      {phase === "input" && (
-        <section>
-          <label htmlFor="list" className="label">
-            Words or sentences (one per line)
-          </label>
-          <textarea
-            id="list"
-            value={raw}
-            onChange={(e) => setRaw(e.target.value)}
-            rows={10}
-            placeholder={lang === "en" ? "apple\nThe quick brown fox jumps over the lazy dog" : "苹果\n今天天气很好我们去公园玩"}
+      <main className="page">
+        {phase === "setup" && (
+          <Setup
+            queue={queue}
+            setQueue={setQueue}
+            lists={lists}
+            setLists={setLists}
+            settings={settings}
+            setSettings={setSettings}
+            error={error}
+            clearError={() => setError("")}
+            onStart={() => start(queue.map((q) => q.text))}
           />
-          <p className={parsed.length > MAX_ITEMS ? "count over" : "count"}>
-            {parsed.length}/{MAX_ITEMS}
-          </p>
-
-          <fieldset>
-            <legend>Language</legend>
-            <label className="choice">
-              <input type="radio" name="lang" checked={lang === "en"} onChange={() => setLang("en")} />
-              English
-            </label>
-            <label className="choice">
-              <input type="radio" name="lang" checked={lang === "zh"} onChange={() => setLang("zh")} />
-              中文 (Simplified)
-            </label>
-          </fieldset>
-
-          <fieldset>
-            <legend>Order</legend>
-            <label className="choice">
-              <input type="radio" name="order" checked={order === "sequence"} onChange={() => setOrder("sequence")} />
-              In sequence
-            </label>
-            <label className="choice">
-              <input type="radio" name="order" checked={order === "random"} onChange={() => setOrder("random")} />
-              Random
-            </label>
-          </fieldset>
-
-          <fieldset>
-            <legend>Speed</legend>
-            <label className="choice">
-              <input type="radio" name="rate" checked={rateKey === "slow"} onChange={() => setRateKey("slow")} />
-              Slow
-            </label>
-            <label className="choice">
-              <input type="radio" name="rate" checked={rateKey === "normal"} onChange={() => setRateKey("normal")} />
-              Normal
-            </label>
-          </fieldset>
-
-          {voiceMissing && (
-            <p className="warn">
-              {speechSupported
-                ? `No ${lang === "en" ? "English" : "Chinese (Simplified)"} voice was found on this device.`
-                : "This browser cannot read text aloud. Try Chrome, Edge or Safari."}
-            </p>
-          )}
-          {error && <p className="warn">{error}</p>}
-
-          <button
-            className="primary"
-            onClick={start}
-            disabled={parsed.length === 0 || parsed.length > MAX_ITEMS}
-          >
-            Start spelling
-          </button>
-        </section>
-      )}
-
-      {phase === "spell" && (
-        <Spell
-          items={session.items}
-          lang={session.lang}
-          voices={voices}
-          rate={RATES[rateKey]}
-          rateKey={rateKey}
-          setRateKey={setRateKey}
-          onDone={finish}
-        />
-      )}
-
-      {phase === "reveal" && (
-        <section>
-          <h2>Answers</h2>
-          <ol className="answers" lang={session.lang}>
-            {session.items.map((item, i) => (
-              <li key={i} className={i > lastRead ? "unread" : ""}>
-                {item}
-                {i > lastRead && <span className="tag"> (not read)</span>}
-              </li>
-            ))}
-          </ol>
-          <button className="primary" onClick={again}>
-            Start again
-          </button>
-        </section>
-      )}
-    </main>
-  );
-}
-
-function Spell({ items, lang, voices, rate, rateKey, setRateKey, onDone }) {
-  const [idx, setIdx] = useState(0);
-  const [part, setPart] = useState(0);
-  const [tick, setTick] = useState(0);
-  const maxReached = useRef(0);
-
-  // Chunks are computed but never rendered, so the words stay out of the DOM.
-  const chunks = useMemo(() => chunkItem(items[idx], lang), [items, idx, lang]);
-  const lastPart = part >= chunks.length - 1;
-  const lastItem = idx >= items.length - 1;
-
-  const voicesRef = useRef(voices);
-  const rateRef = useRef(rate);
-  voicesRef.current = voices;
-  rateRef.current = rate;
-
-  useEffect(() => {
-    speak(chunks[part], lang, voicesRef.current, rateRef.current);
-  }, [chunks, part, tick, lang]);
-
-  useEffect(() => stopSpeaking, []);
-
-  const go = (nextIdx) => {
-    maxReached.current = Math.max(maxReached.current, nextIdx);
-    setIdx(nextIdx);
-    setPart(0);
-  };
-
-  return (
-    <section className="spell">
-      <p className="progress">
-        Item {idx + 1} of {items.length}
-      </p>
-      {chunks.length > 1 && (
-        <p className="part">
-          Part {part + 1} of {chunks.length}
-        </p>
-      )}
-
-      <button className="big" onClick={() => setTick((t) => t + 1)}>
-        Repeat
-      </button>
-
-      {!lastPart && (
-        <button className="big primary" onClick={() => setPart((p) => p + 1)}>
-          Continue
-        </button>
-      )}
-
-      <div className="nav">
-        <button disabled={idx === 0} onClick={() => go(idx - 1)}>
-          Prev
-        </button>
-        {lastItem ? (
-          <button className="primary" disabled={!lastPart} onClick={() => onDone(items.length - 1)}>
-            Finish
-          </button>
-        ) : (
-          <button disabled={!lastPart} onClick={() => go(idx + 1)}>
-            Next
-          </button>
         )}
-        <button className="danger" onClick={() => onDone(Math.max(maxReached.current, idx))}>
-          End
-        </button>
-      </div>
-
-      <div className="speed">
-        Speed:
-        <button className={rateKey === "slow" ? "on" : ""} onClick={() => setRateKey("slow")}>
-          Slow
-        </button>
-        <button className={rateKey === "normal" ? "on" : ""} onClick={() => setRateKey("normal")}>
-          Normal
-        </button>
-      </div>
-    </section>
+        {phase === "practice" && (
+          <Practice
+            items={session.items}
+            voices={voices}
+            settings={settings}
+            setSettings={setSettings}
+            onExit={backToSetup}
+            onDone={finish}
+          />
+        )}
+        {phase === "results" && (
+          <Results
+            items={session.items}
+            lastRead={session.lastRead}
+            seconds={session.seconds}
+            voices={voices}
+            rate={settings.rate}
+            onBack={backToSetup}
+            onRepractice={(texts) => {
+              // Fall back to the setup screen so any error is visible there.
+              setPhase("setup");
+              start(texts);
+            }}
+          />
+        )}
+      </main>
+    </div>
   );
 }

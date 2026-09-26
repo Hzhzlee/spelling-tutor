@@ -48,3 +48,12 @@ export function shuffle(list) {
   }
   return a;
 }
+
+// Auto-detect the language of an item: any CJK character means Chinese.
+export function detectLang(item) {
+  return /[㐀-鿿]/.test(item) ? "zh-CN" : "en";
+}
+
+export function uid() {
+  return Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+}
