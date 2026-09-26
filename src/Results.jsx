@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { speak, stopSpeaking } from "./speech.js";
 import { SpeakerIcon } from "./Practice.jsx";
 
@@ -8,17 +8,33 @@ function fmt(total) {
   return `${m}m ${String(s).padStart(2, "0")}s`;
 }
 
-export default function Results({ items, lastRead, seconds, voices, rate, onBack, onRepractice }) {
+export default function Results({ items, lastRead, seconds, voices, rate, onMarks, onBack, onHistory, onRepractice }) {
   // marks: item id -> "right" | "review"
   const [marks, setMarks] = useState({});
+
+  // Keep the history log in step with the self-check marks.
+  const onMarksRef = useRef(onMarks);
+  onMarksRef.current = onMarks;
+  const first = useRef(true);
+  useEffect(() => {
+    if (first.current) {
+      first.current = false;
+      return;
+    }
+    onMarksRef.current(marks);
+  }, [marks]);
 
   const practiced = items.slice(0, lastRead + 1);
   const right = practiced.filter((it) => marks[it.id] === "right").length;
   const missed = practiced.filter((it) => marks[it.id] === "review");
   const marked = right + missed.length;
   const accuracy = practiced.length ? Math.round((right / practiced.length) * 1000) / 10 : 0;
-  const zh = practiced.filter((it) => it.lang === "zh-CN").length;
-  const en = practiced.length - zh;
+  const count = (k) => practiced.filter((it) => it.kind === k).length;
+  const balance = [
+    ["EN", count("en")],
+    ["ZH", count("zh")],
+    ["PY", count("pinyin")],
+  ].filter(([, n]) => n > 0);
 
   const mark = (id, value) =>
     setMarks((m) => {
@@ -28,7 +44,7 @@ export default function Results({ items, lastRead, seconds, voices, rate, onBack
       return next;
     });
 
-  const play = (it) => speak(it.text, it.lang, voices, rate);
+  const play = (it) => speak(it.full, it.lang, voices, rate);
 
   return (
     <div className="results">
@@ -59,7 +75,7 @@ export default function Results({ items, lastRead, seconds, voices, rate, onBack
           <div className="stat">
             <span className="muted">Language balance</span>
             <strong>
-              EN {en} · ZH {zh}
+              {balance.length ? balance.map(([k, n]) => `${k} ${n}`).join(" · ") : "–"}
             </strong>
           </div>
         </div>
@@ -79,15 +95,15 @@ export default function Results({ items, lastRead, seconds, voices, rate, onBack
                 >
                   <div className="row between">
                     <span className="eyebrow">
-                      Item {i + 1} · {it.lang === "zh-CN" ? "ZH" : "EN"}
+                      Item {i + 1} · {{ en: "EN", zh: "ZH", pinyin: "PY" }[it.kind]}
                     </span>
                     {!read && <span className="tag">Not read</span>}
                   </div>
                   <div className="row between">
-                    <p className="answer" lang={it.lang}>
-                      {it.text}
+                    <p className="answer" lang={it.kind === "zh" ? "zh-CN" : undefined}>
+                      {it.display}
                     </p>
-                    <button className="round" onClick={() => play(it)} aria-label={`Play ${it.text}`}>
+                    <button className="round" onClick={() => play(it)} aria-label={`Play ${it.display}`}>
                       <SpeakerIcon />
                     </button>
                   </div>
@@ -115,8 +131,8 @@ export default function Results({ items, lastRead, seconds, voices, rate, onBack
             ) : (
               <ul className="review-list">
                 {missed.map((it) => (
-                  <li key={it.id} lang={it.lang}>
-                    {it.text}
+                  <li key={it.id} lang={it.kind === "zh" ? "zh-CN" : undefined}>
+                    {it.display}
                   </li>
                 ))}
               </ul>
@@ -134,6 +150,10 @@ export default function Results({ items, lastRead, seconds, voices, rate, onBack
           </div>
 
           <div className="card">
+            <p className="muted">This result is saved to History automatically.</p>
+            <button className="wide" onClick={onHistory}>
+              View history
+            </button>
             <button className="wide" onClick={onBack}>
               Back to lists
             </button>

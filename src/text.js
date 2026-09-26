@@ -57,3 +57,24 @@ export function detectLang(item) {
 export function uid() {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
 }
+
+// Everything the app needs to know about one item.
+// kind: "en" | "zh" | "pinyin"; lang is the voice language; chunks are what gets spoken.
+import { parsePinyin, toMarks, toSpeech } from "./pinyin.js";
+
+export function describe(text) {
+  const syl = parsePinyin(text);
+  if (syl) {
+    const chunks = [];
+    for (let i = 0; i < syl.length; i += CHUNK_SIZE) chunks.push(toSpeech(syl.slice(i, i + CHUNK_SIZE)));
+    return { kind: "pinyin", lang: "zh-CN", display: toMarks(syl), chunks, full: toSpeech(syl) };
+  }
+  const lang = detectLang(text);
+  return {
+    kind: lang === "zh-CN" ? "zh" : "en",
+    lang,
+    display: text,
+    chunks: chunkItem(text, lang),
+    full: text,
+  };
+}

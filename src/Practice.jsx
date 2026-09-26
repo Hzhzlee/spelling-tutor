@@ -1,5 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { chunkItem } from "./text.js";
+import { useEffect, useRef, useState } from "react";
 import { speak, stopSpeaking } from "./speech.js";
 
 const RATES = [0.75, 0.85, 1];
@@ -29,7 +28,7 @@ export default function Practice({ items, voices, settings, setSettings, onExit,
   const item = items[idx];
 
   // Chunks are used only to speak; they are never rendered, so the words stay out of the DOM.
-  const chunks = useMemo(() => chunkItem(item.text, item.lang), [item]);
+  const chunks = item.chunks;
   const lastPart = part >= chunks.length - 1;
   const lastItem = idx >= items.length - 1;
 
@@ -86,7 +85,7 @@ export default function Practice({ items, voices, settings, setSettings, onExit,
       <div className="p-body">
         <section className="card stage">
           <p className="eyebrow">
-            Item {idx + 1} · {item.lang === "zh-CN" ? "Chinese spelling" : "English spelling"}
+            Item {idx + 1} · {item.kind === "pinyin" ? "Hanyu Pinyin" : item.kind === "zh" ? "Chinese spelling" : "English spelling"}
           </p>
           <p className="hidden-word" aria-label="Word hidden">
             [ Word Hidden ••• ]

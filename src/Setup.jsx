@@ -1,10 +1,20 @@
-import { useState } from "react";
-import { MAX_ITEMS, detectLang, parseItems, uid } from "./text.js";
+import { useRef, useState } from "react";
+import { MAX_ITEMS, describe, parseItems, uid } from "./text.js";
+import { looksLikePinyin } from "./pinyin.js";
+import { parseBackup, parseHistoryBackup } from "./storage.js";
 
 const RATES = [0.75, 0.85, 1];
 
+const TAGS = { en: "EN", zh: "ZH", pinyin: "PY" };
+
 function LangTag({ text }) {
-  return <span className="tag">{detectLang(text) === "zh-CN" ? "ZH" : "EN"}</span>;
+  if (badPinyin(text)) return <span className="tag bad">PY?</span>;
+  return <span className="tag">{TAGS[describe(text).kind]}</span>;
+}
+
+// Typed with tone numbers or marks but not readable as pinyin (likely a typo).
+function badPinyin(text) {
+  return looksLikePinyin(text) && describe(text).kind !== "pinyin";
 }
 
 export default function Setup({
@@ -12,6 +22,9 @@ export default function Setup({
   setQueue,
   lists,
   setLists,
+  history,
+  setHistory,
+  setListName,
   settings,
   setSettings,
   error,
@@ -30,6 +43,10 @@ export default function Setup({
 
   const addOne = () => {
     if (!trimmed || room <= 0) return;
+    if (badPinyin(trimmed)) {
+      setNote(`"${trimmed}" isn't valid pinyin. Check the spelling, e.g. shi1 zi.`);
+      return;
+    }
     setQueue([...queue, { id: uid(), text: trimmed }]);
     setText("");
     setNote("");
@@ -39,6 +56,11 @@ export default function Setup({
   const addBulk = () => {
     const lines = parseItems(bulkText);
     if (lines.length === 0) return;
+    const bad = lines.filter(badPinyin);
+    if (bad.length > 0) {
+      setNote(`Not valid pinyin: ${bad.slice(0, 3).join(", ")}${bad.length > 3 ? "…" : ""}. Fix and add again.`);
+      return;
+    }
     const take = lines.slice(0, room);
     setQueue([...queue, ...take.map((t) => ({ id: uid(), text: t }))]);
     setBulkText("");
@@ -65,14 +87,66 @@ export default function Setup({
     // Saving under an existing name replaces that list.
     const others = lists.filter((l) => l.name.toLowerCase() !== listName.toLowerCase());
     setLists([entry, ...others]);
+    setListName(listName);
     setName("");
     setNote(`Saved "${listName}" on this device.`);
   };
 
   const loadList = (list) => {
     setQueue(list.items.slice(0, MAX_ITEMS).map((t) => ({ id: uid(), text: t })));
+    setListName(list.name);
     setNote(`Loaded "${list.name}".`);
     clearError();
+  };
+
+  const fileRef = useRef(null);
+  const [libNote, setLibNote] = useState("");
+
+  const exportLists = () => {
+    const payload = { app: "SpellWise", version: 2, exportedAt: new Date().toISOString(), lists, history };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `spellwise-lists-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setLibNote(
+      `Exported ${lists.length} list${lists.length === 1 ? "" : "s"} and ${history.length} result${
+        history.length === 1 ? "" : "s"
+      }.`
+    );
+  };
+
+  const importLists = (file) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const json = String(reader.result);
+      const incoming = parseBackup(json) || [];
+      const logs = parseHistoryBackup(json);
+      if (incoming.length === 0 && logs.length === 0) {
+        setLibNote("That file isn't a SpellWise backup, or it's empty.");
+        return;
+      }
+      // Same list name (case-insensitive) is replaced by the imported version.
+      const names = new Set(incoming.map((l) => l.name.toLowerCase()));
+      const kept = lists.filter((l) => !names.has(l.name.toLowerCase()));
+      setLists([...incoming.map((l) => ({ ...l, id: uid() })), ...kept]);
+      // Results already on this device (same id) are not duplicated.
+      const have = new Set(history.map((h) => h.id));
+      const fresh = logs.filter((h) => !have.has(h.id));
+      setHistory([...history, ...fresh].sort((a, b) => b.at - a.at));
+      setLibNote(
+        `Imported ${incoming.length} list${incoming.length === 1 ? "" : "s"} and ${fresh.length} result${
+          fresh.length === 1 ? "" : "s"
+        }.`
+      );
+    };
+    reader.onerror = () => setLibNote("Couldn't read that file.");
+    reader.readAsText(file);
   };
 
   const deleteList = (id) => {
@@ -94,7 +168,7 @@ export default function Setup({
               <li key={l.id}>
                 <div className="list-info">
                   <strong>{l.name}</strong>
-                  <span className="muted">{l.items.length} items</span>
+                  <span className="muted">{l.items.length} {l.items.length === 1 ? "item" : "items"}</span>
                 </div>
                 {confirmId === l.id ? (
                   <div className="list-actions">
@@ -123,6 +197,25 @@ export default function Setup({
             ))}
           </ul>
         )}
+        <div className="backup">
+          <button className="small" onClick={exportLists} disabled={lists.length === 0 && history.length === 0}>
+            Export backup
+          </button>
+          <button className="small" onClick={() => fileRef.current && fileRef.current.click()}>
+            Import backup
+          </button>
+          <input
+            ref={fileRef}
+            type="file"
+            accept="application/json,.json"
+            hidden
+            onChange={(e) => {
+              importLists(e.target.files && e.target.files[0]);
+              e.target.value = "";
+            }}
+          />
+        </div>
+        {libNote && <p className="note">{libNote}</p>}
       </aside>
 
       {/* Add + queue */}
@@ -141,7 +234,7 @@ export default function Setup({
                 rows={6}
                 value={bulkText}
                 onChange={(e) => setBulkText(e.target.value)}
-                placeholder={"One word or sentence per line\naccomplish\n图书馆"}
+                placeholder={"One word or sentence per line\naccomplish\n图书馆\nshi1 zi"}
               />
               <div className="row end">
                 <button className="primary" onClick={addBulk} disabled={!bulkText.trim() || room <= 0}>
@@ -159,7 +252,7 @@ export default function Setup({
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && !e.nativeEvent.isComposing) addOne();
                   }}
-                  placeholder="Type a word or sentence (English or 中文)"
+                  placeholder="English, 中文, or pinyin like shi1 zi"
                   aria-label="Word or sentence"
                 />
                 {trimmed && <LangTag text={trimmed} />}
@@ -167,9 +260,18 @@ export default function Setup({
                   Add
                 </button>
               </div>
+              {trimmed && describe(trimmed).kind === "pinyin" && (
+                <p className="preview">
+                  Shows as <strong>{describe(trimmed).display}</strong>
+                </p>
+              )}
+              {trimmed && badPinyin(trimmed) && (
+                <p className="warn">Not valid pinyin yet. Check each syllable, e.g. shi1 zi.</p>
+              )}
               <p className="muted">
-                Language is detected automatically. Sentences longer than 4 words (or 4 Chinese
-                characters) are read 4 at a time.
+                Language is detected automatically. For pinyin, add tone numbers (shi1 zi, lv4 se4)
+                or tone marks (shī zi); leave neutral tones without a number. Sentences longer than
+                4 words, characters or syllables are read 4 at a time.
               </p>
             </>
           )}
@@ -185,7 +287,10 @@ export default function Setup({
               </span>
             </h2>
             {queue.length > 0 && (
-              <button className="small ghost" onClick={() => setQueue([])}>
+              <button className="small ghost" onClick={() => {
+                  setQueue([]);
+                  setListName("");
+                }}>
                 Clear all
               </button>
             )}
@@ -198,8 +303,8 @@ export default function Setup({
               {queue.map((q, i) => (
                 <li key={q.id}>
                   <span className="num">{i + 1}</span>
-                  <span className="q-text" lang={detectLang(q.text)}>
-                    {q.text}
+                  <span className="q-text" lang={describe(q.text).kind === "zh" ? "zh-CN" : undefined}>
+                    {describe(q.text).display}
                   </span>
                   <LangTag text={q.text} />
                   <button
