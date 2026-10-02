@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { MAX_ITEMS, describe, parseItems, uid } from "./text.js";
 import { looksLikePinyin } from "./pinyin.js";
 import { parseBackup, parseHistoryBackup } from "./storage.js";
+import { pickVoice, speak, voicesFor } from "./speech.js";
 
 const RATES = [0.75, 0.85, 1];
 
@@ -27,6 +28,7 @@ export default function Setup({
   setListName,
   settings,
   setSettings,
+  voices,
   error,
   clearError,
   onStart,
@@ -366,6 +368,23 @@ export default function Setup({
               Random
             </button>
           </div>
+
+          <VoicePicker
+            label="English voice"
+            lang="en"
+            sample="Accomplish. This is how your spelling words will sound."
+            voices={voices}
+            settings={settings}
+            setSettings={setSettings}
+          />
+          <VoicePicker
+            label="Chinese voice"
+            lang="zh-CN"
+            sample="图书馆。这是听写的声音。"
+            voices={voices}
+            settings={settings}
+            setSettings={setSettings}
+          />
         </div>
 
         <div className="card start-card">
@@ -383,6 +402,43 @@ export default function Setup({
           </button>
         </div>
       </aside>
+    </div>
+  );
+}
+
+function VoicePicker({ label, lang, sample, voices, settings, setSettings }) {
+  const list = voicesFor(voices, lang);
+  const chosen = (settings.voices && settings.voices[lang]) || "";
+  const active = pickVoice(voices, lang);
+  const id = `voice-${lang}`;
+
+  const choose = (value) =>
+    setSettings({ ...settings, voices: { ...(settings.voices || {}), [lang]: value } });
+
+  return (
+    <div className="voice">
+      <label className="label" htmlFor={id}>
+        {label}
+      </label>
+      {list.length === 0 ? (
+        <p className="muted">No {lang === "en" ? "English" : "Chinese"} voice on this device.</p>
+      ) : (
+        <>
+          <div className="voice-row">
+            <select id={id} value={chosen} onChange={(e) => choose(e.target.value)}>
+              <option value="">Best available{active && !chosen ? ` (${active.name})` : ""}</option>
+              {list.map((v) => (
+                <option key={v.voiceURI || v.name} value={v.voiceURI || v.name}>
+                  {v.name} ({v.lang})
+                </option>
+              ))}
+            </select>
+            <button className="small" onClick={() => speak(sample, lang, voices, settings.rate)}>
+              Test
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }

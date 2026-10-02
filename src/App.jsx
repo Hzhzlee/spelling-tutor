@@ -1,13 +1,13 @@
 import { useEffect, useState } from "react";
 import { MAX_ITEMS, describe, shuffle, uid } from "./text.js";
-import { pickVoice, speechSupported, stopSpeaking, useVoices } from "./speech.js";
+import { pickVoice, setPreferredVoices, speechSupported, stopSpeaking, useVoices } from "./speech.js";
 import { requestPersistence, useStored } from "./storage.js";
 import Setup from "./Setup.jsx";
 import Practice from "./Practice.jsx";
 import Results from "./Results.jsx";
 import History from "./History.jsx";
 
-const DEFAULT_SETTINGS = { rate: 0.85, order: "sequence" };
+const DEFAULT_SETTINGS = { rate: 0.85, order: "sequence", voices: { en: "", "zh-CN": "" } };
 const MAX_LOGS = 500;
 
 // One history entry per session; rebuilt whenever self-check marks change.
@@ -42,6 +42,9 @@ export default function App() {
   const [phase, setPhase] = useState("setup"); // setup | practice | results | history
   const [session, setSession] = useState(null);
   const [error, setError] = useState("");
+
+  // Apply the chosen voices before anything speaks.
+  setPreferredVoices(settings.voices);
 
   useEffect(() => {
     requestPersistence();
@@ -129,6 +132,7 @@ export default function App() {
             setListName={setListName}
             settings={settings}
             setSettings={setSettings}
+            voices={voices}
             error={error}
             clearError={() => setError("")}
             onStart={() => start(queue.map((q) => q.text), listName)}
