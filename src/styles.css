@@ -757,31 +757,37 @@ textarea {
   opacity: 0.55;
 }
 
-/* Voice picker */
-.voice-row {
-  display: flex;
-  gap: 6px;
-  align-items: center;
+
+/* Queue reordering */
+.queue li {
+  cursor: grab;
 }
 
-.voice-row select {
-  flex: 1;
-  min-width: 0;
-  min-height: 40px;
-  font: inherit;
+.queue li.dragging {
+  opacity: 0.4;
+}
+
+.queue li.drop-target {
+  box-shadow: inset 0 2px 0 var(--accent);
+}
+
+.queue .handle {
+  color: var(--muted);
+  letter-spacing: -3px;
   font-size: 0.9rem;
-  padding: 0 8px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: #fff;
-  color: var(--fg);
+  user-select: none;
+  flex: none;
 }
 
-.voice {
-  margin-top: 4px;
+.queue .icon {
+  width: 32px;
+  flex: none;
 }
 
-.seg + .voice,
-.voice + .voice {
-  margin-top: 8px;
+.queue .icon.move {
+  font-size: 1rem;
+}
+
+.queue li .icon:disabled {
+  opacity: 0.2;
 }

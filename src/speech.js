@@ -22,65 +22,32 @@ export function useVoices() {
 
 const norm = (l) => (l || "").toLowerCase().replace("_", "-");
 
-const isLang = (v, lang) => {
-  const l = norm(v.lang);
-  if (lang === "zh-CN") return (l.startsWith("zh") || l.startsWith("cmn")) && !/hk|tw|yue|hant|mo/.test(l);
-  return l.startsWith("en");
-};
-
-// Novelty and low-quality engines that sound robotic.
-const BAD = /espeak|compact|eloquence|novelty|whisper|bad news|good news|bells|boing|bubbles|cellos|zarvox|trinoids|albert|bahh|jester|organ|superstar|wobble|deranged|hysterical/i;
-// Older Apple character voices: usable but not ideal for dictation.
-const MEH = /\b(fred|junior|ralph|kathy|grandma|grandpa|rocko|shelley|flo|reed|sandy|eddy)\b/i;
-// Voices that are known to sound natural.
-const GOOD = /\b(samantha|ava|allison|susan|zoe|evan|nathan|joelle|noelle|karen|daniel|serena|moira|tessa|kate|oliver|aria|jenny|guy|libby|sonia|ryan|tingting|ting-ting|meijia|lilian|xiaoxiao|xiaoyi|yunxi|yunyang|huihui|yaoyao|kangkang)\b/i;
-
-// Higher score = more natural sounding.
-export function scoreVoice(v, lang) {
-  const name = `${v.name || ""} ${v.voiceURI || ""}`;
-  let s = 0;
-  if (BAD.test(name)) s -= 100;
-  if (MEH.test(name)) s -= 20;
-  if (/natural|neural/i.test(name)) s += 60; // Edge "Online (Natural)" voices
-  if (/premium/i.test(name)) s += 50; // Apple downloadable premium voices
-  if (/enhanced/i.test(name)) s += 40;
-  if (/google/i.test(name)) s += 30; // Chrome cloud voices
-  if (/online/i.test(name)) s += 20;
-  if (GOOD.test(name)) s += 15;
-  if (v.localService === false) s += 10;
-  const l = norm(v.lang);
-  if (lang === "zh-CN") {
-    if (l === "zh-cn" || l === "cmn-cn" || l.startsWith("zh-hans")) s += 5;
-  } else if (l === "en-us") s += 5;
-  else if (l === "en-gb") s += 4;
-  else if (l === "en-sg" || l === "en-au") s += 3;
-  return s;
-}
-
-// Voices for a language, best first.
-export function voicesFor(voices, lang) {
-  return voices
-    .filter((v) => isLang(v, lang))
-    .map((v) => ({ v, s: scoreVoice(v, lang) }))
-    .sort((a, b) => b.s - a.s)
-    .map((x) => x.v);
-}
-
-// User's chosen voice per language (voiceURI); "" means automatic.
-const preferred = { en: "", "zh-CN": "" };
-export function setPreferredVoices(map) {
-  preferred.en = (map && map.en) || "";
-  preferred["zh-CN"] = (map && map["zh-CN"]) || "";
-}
-
+// Chinese: first Mainland Mandarin voice (original behaviour).
+// English: fixed to Daniel (en-GB); falls back to another British, then any English voice
+// on devices that do not have Daniel (e.g. Windows, Android).
 export function pickVoice(voices, lang) {
-  const key = lang === "zh-CN" ? "zh-CN" : "en";
-  const list = voicesFor(voices, key);
-  if (preferred[key]) {
-    const chosen = list.find((v) => v.voiceURI === preferred[key] || v.name === preferred[key]);
-    if (chosen) return chosen;
+  if (lang === "zh-CN") {
+    const isZh = (v) => norm(v.lang).startsWith("zh") || norm(v.lang).startsWith("cmn");
+    return (
+      voices.find((v) => ["zh-cn", "zh-hans", "zh-hans-cn", "cmn-cn"].includes(norm(v.lang))) ||
+      voices.find((v) => isZh(v) && !/hk|tw|yue|hant/.test(norm(v.lang))) ||
+      null
+    );
   }
-  return list[0] || null;
+  const isEn = (v) => norm(v.lang).startsWith("en");
+  const daniels = voices.filter((v) => isEn(v) && /\bdaniel\b/i.test(v.name || ""));
+  const daniel =
+    daniels.find((v) => /premium/i.test(v.name)) ||
+    daniels.find((v) => /enhanced/i.test(v.name)) ||
+    daniels.find((v) => norm(v.lang) === "en-gb") ||
+    daniels[0];
+  return (
+    daniel ||
+    voices.find((v) => norm(v.lang) === "en-gb") ||
+    voices.find((v) => norm(v.lang) === "en-us") ||
+    voices.find(isEn) ||
+    null
+  );
 }
 
 export function speakerLang(lang) {
