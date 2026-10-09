@@ -3,13 +3,18 @@ import { MAX_ITEMS, describe, parseItems, uid } from "./text.js";
 import { looksLikePinyin } from "./pinyin.js";
 import { parseBackup, parseHistoryBackup } from "./storage.js";
 
-const RATES = [0.75, 0.85, 1];
+export const PACES = [
+  { rate: 0.75, label: "Slow", icon: "🐢" },
+  { rate: 0.85, label: "Gentle", icon: "🐰" },
+  { rate: 1, label: "Speedy", icon: "🐆" },
+];
 
-const TAGS = { en: "EN", zh: "ZH", pinyin: "PY" };
+export const TAGS = { en: "EN", zh: "ZH", pinyin: "PY" };
 
 function LangTag({ text }) {
-  if (badPinyin(text)) return <span className="tag bad">PY?</span>;
-  return <span className="tag">{TAGS[describe(text).kind]}</span>;
+  if (badPinyin(text)) return <span className="lang lang-bad">PY?</span>;
+  const kind = describe(text).kind;
+  return <span className={`lang lang-${kind}`}>{TAGS[kind]}</span>;
 }
 
 // Typed with tone numbers or marks but not readable as pinyin (likely a typo).
@@ -24,6 +29,7 @@ export default function Setup({
   setLists,
   history,
   setHistory,
+  listName,
   setListName,
   settings,
   setSettings,
@@ -90,19 +96,19 @@ export default function Setup({
 
   const saveList = () => {
     if (queue.length === 0) return;
-    const listName = name.trim() || `List ${lists.length + 1}`;
+    const newName = name.trim() || listName || `List ${lists.length + 1}`;
     const entry = {
       id: uid(),
-      name: listName,
+      name: newName,
       items: queue.map((q) => q.text),
       savedAt: Date.now(),
     };
     // Saving under an existing name replaces that list.
-    const others = lists.filter((l) => l.name.toLowerCase() !== listName.toLowerCase());
+    const others = lists.filter((l) => l.name.toLowerCase() !== newName.toLowerCase());
     setLists([entry, ...others]);
-    setListName(listName);
+    setListName(newName);
     setName("");
-    setNote(`Saved "${listName}" on this device.`);
+    setNote(`Saved "${newName}" to your lists.`);
   };
 
   const loadList = (list) => {
@@ -168,280 +174,326 @@ export default function Setup({
   };
 
   return (
-    <div className="setup">
-      {/* Library */}
-      <aside className="card library">
-        <h2>Unit Library</h2>
-        <p className="muted">Lists are saved in this browser only.</p>
-        {lists.length === 0 ? (
-          <p className="empty">No saved lists yet. Build a queue, name it and press Save.</p>
-        ) : (
-          <ul className="lists">
-            {lists.map((l) => (
-              <li key={l.id}>
-                <div className="list-info">
-                  <strong>{l.name}</strong>
-                  <span className="muted">{l.items.length} {l.items.length === 1 ? "item" : "items"}</span>
-                </div>
-                {confirmId === l.id ? (
-                  <div className="list-actions">
-                    <button className="small danger" onClick={() => deleteList(l.id)}>
-                      Delete
-                    </button>
-                    <button className="small" onClick={() => setConfirmId(null)}>
-                      Cancel
-                    </button>
-                  </div>
-                ) : (
-                  <div className="list-actions">
-                    <button className="small" onClick={() => loadList(l)}>
-                      Load
-                    </button>
-                    <button
-                      className="small ghost"
-                      aria-label={`Delete ${l.name}`}
-                      onClick={() => setConfirmId(l.id)}
-                    >
-                      Delete
-                    </button>
-                  </div>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
-        <div className="backup">
-          <button className="small" onClick={exportLists} disabled={lists.length === 0 && history.length === 0}>
-            Export backup
-          </button>
-          <button className="small" onClick={() => fileRef.current && fileRef.current.click()}>
-            Import backup
-          </button>
-          <input
-            ref={fileRef}
-            type="file"
-            accept="application/json,.json"
-            hidden
-            onChange={(e) => {
-              importLists(e.target.files && e.target.files[0]);
-              e.target.value = "";
-            }}
-          />
+    <div className="chest">
+      <section className="card hero-card">
+        <div className="hero-text">
+          <span className="pill pill-honey">📚 Word Chest</span>
+          <h1>Build your spelling list</h1>
+          <p className="sub">Add English words, 中文 or pinyin, then start the adventure.</p>
         </div>
-        {libNote && <p className="note">{libNote}</p>}
-      </aside>
-
-      {/* Add + queue */}
-      <section className="main-col">
-        <div className="card">
-          <div className="row between">
-            <h2>Add to dictation session</h2>
-            <button className="small ghost" onClick={() => setBulk((b) => !b)}>
-              {bulk ? "Single add" : "Bulk paste"}
-            </button>
-          </div>
-
-          {bulk ? (
-            <>
-              <textarea
-                rows={6}
-                value={bulkText}
-                onChange={(e) => setBulkText(e.target.value)}
-                placeholder={"One word or sentence per line\naccomplish\n图书馆\nshi1 zi"}
-              />
-              <div className="row end">
-                <button className="primary" onClick={addBulk} disabled={!bulkText.trim() || room <= 0}>
-                  Add all
-                </button>
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="add-row">
-                <input
-                  type="text"
-                  value={text}
-                  onChange={(e) => setText(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.nativeEvent.isComposing) addOne();
-                  }}
-                  placeholder="English, 中文, or pinyin like shi1 zi"
-                  aria-label="Word or sentence"
-                />
-                {trimmed && <LangTag text={trimmed} />}
-                <button className="primary" onClick={addOne} disabled={!trimmed || room <= 0}>
-                  Add
-                </button>
-              </div>
-              {trimmed && describe(trimmed).kind === "pinyin" && (
-                <p className="preview">
-                  Shows as <strong>{describe(trimmed).display}</strong>
-                </p>
-              )}
-              {trimmed && badPinyin(trimmed) && (
-                <p className="warn">Not valid pinyin yet. Check each syllable, e.g. shi1 zi.</p>
-              )}
-              <p className="muted">
-                Language is detected automatically. For pinyin, add tone numbers (shi1 zi, lv4 se4)
-                or tone marks (shī zi); leave neutral tones without a number. Sentences longer than
-                4 words, characters or syllables are read 4 at a time.
-              </p>
-            </>
-          )}
-          {room <= 0 && <p className="warn">The queue is full ({MAX_ITEMS} items).</p>}
-          {note && <p className="note">{note}</p>}
-        </div>
-
-        <div className="card">
-          <div className="row between">
-            <h2>
-              Queue List <span className={queue.length >= MAX_ITEMS ? "count over" : "count"}>
-                {queue.length}/{MAX_ITEMS}
-              </span>
-            </h2>
-            {queue.length > 0 && (
-              <button className="small ghost" onClick={() => {
-                  setQueue([]);
-                  setListName("");
-                }}>
-                Clear all
-              </button>
-            )}
-          </div>
-
-          {queue.length === 0 ? (
-            <p className="empty">Nothing queued yet.</p>
-          ) : (
-            <ol className="queue">
-              {queue.map((q, i) => (
-                <li
-                  key={q.id}
-                  draggable
-                  onDragStart={(e) => {
-                    setDragFrom(i);
-                    e.dataTransfer.effectAllowed = "move";
-                    e.dataTransfer.setData("text/plain", String(i));
-                  }}
-                  onDragOver={(e) => {
-                    e.preventDefault();
-                    if (dragOver !== i) setDragOver(i);
-                  }}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    if (dragFrom !== null) move(dragFrom, i);
-                    setDragFrom(null);
-                    setDragOver(null);
-                  }}
-                  onDragEnd={() => {
-                    setDragFrom(null);
-                    setDragOver(null);
-                  }}
-                  className={
-                    dragFrom === i ? "dragging" : dragOver === i && dragFrom !== null ? "drop-target" : ""
-                  }
-                >
-                  <span className="handle" aria-hidden="true" title="Drag to reorder">
-                    ⋮⋮
-                  </span>
-                  <span className="num">{i + 1}</span>
-                  <span className="q-text" lang={describe(q.text).kind === "zh" ? "zh-CN" : undefined}>
-                    {describe(q.text).display}
-                  </span>
-                  <LangTag text={q.text} />
-                  <button
-                    className="icon move"
-                    aria-label={`Move ${q.text} up`}
-                    disabled={i === 0}
-                    onClick={() => move(i, i - 1)}
-                  >
-                    ↑
-                  </button>
-                  <button
-                    className="icon move"
-                    aria-label={`Move ${q.text} down`}
-                    disabled={i === queue.length - 1}
-                    onClick={() => move(i, i + 1)}
-                  >
-                    ↓
-                  </button>
-                  <button
-                    className="icon"
-                    aria-label={`Remove ${q.text}`}
-                    onClick={() => removeOne(q.id)}
-                  >
-                    ×
-                  </button>
-                </li>
-              ))}
-            </ol>
-          )}
-
-          {queue.length > 0 && (
-            <div className="save-row">
-              <input
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="List name, e.g. Week 4 Spelling"
-                aria-label="List name"
-              />
-              <button onClick={saveList}>Save list</button>
-            </div>
-          )}
+        <div className="bubble">
+          <span className="mascot" aria-hidden="true">
+            🦉
+          </span>
+          <p>Get your notebook and pencil ready. I'll read each word, and you write it down!</p>
         </div>
       </section>
 
-      {/* Pacing + start */}
-      <aside className="side-col">
-        <div className="card">
-          <h2>Audio pacing</h2>
-          <p className="label">Speech rate</p>
-          <div className="seg">
-            {RATES.map((r) => (
-              <button
-                key={r}
-                className={settings.rate === r ? "on" : ""}
-                onClick={() => setSettings({ ...settings, rate: r })}
-              >
-                {r.toFixed(2).replace(/0$/, "")}x
+      <div className="chest-grid">
+        {/* My lists */}
+        <aside className="card lists-card">
+          <div className="card-head">
+            <h2>
+              <span aria-hidden="true">🗂️</span> My Lists
+            </h2>
+            <span className="pill pill-outline">{lists.length}</span>
+          </div>
+          {lists.length === 0 ? (
+            <p className="empty">No saved lists yet. Build a list, give it a name and press Save.</p>
+          ) : (
+            <ul className="saved-lists">
+              {lists.map((l) => (
+                <li key={l.id} className={listName === l.name ? "current" : ""}>
+                  <div className="saved-info">
+                    <strong>{l.name}</strong>
+                    <span>
+                      {l.items.length} {l.items.length === 1 ? "word" : "words"}
+                    </span>
+                  </div>
+                  {confirmId === l.id ? (
+                    <div className="saved-actions">
+                      <button className="btn btn-sm btn-coral" onClick={() => deleteList(l.id)}>
+                        Delete
+                      </button>
+                      <button className="btn btn-sm" onClick={() => setConfirmId(null)}>
+                        Keep
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="saved-actions">
+                      <button className="btn btn-sm btn-sky" onClick={() => loadList(l)}>
+                        Load
+                      </button>
+                      <button
+                        className="btn btn-sm btn-plain"
+                        aria-label={`Delete ${l.name}`}
+                        onClick={() => setConfirmId(l.id)}
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="backup">
+            <button className="btn btn-sm" onClick={exportLists} disabled={lists.length === 0 && history.length === 0}>
+              ⬇️ Export backup
+            </button>
+            <button className="btn btn-sm" onClick={() => fileRef.current && fileRef.current.click()}>
+              ⬆️ Import backup
+            </button>
+            <input
+              ref={fileRef}
+              type="file"
+              accept="application/json,.json"
+              hidden
+              onChange={(e) => {
+                importLists(e.target.files && e.target.files[0]);
+                e.target.value = "";
+              }}
+            />
+          </div>
+          {libNote && <p className="note">{libNote}</p>}
+        </aside>
+
+        {/* Add + queue */}
+        <section className="col">
+          <div className="card">
+            <div className="card-head">
+              <h2>
+                <span aria-hidden="true">✏️</span> Add words
+              </h2>
+              <button className="btn btn-sm btn-plain" onClick={() => setBulk((b) => !b)}>
+                {bulk ? "Add one at a time" : "Paste many"}
               </button>
-            ))}
+            </div>
+
+            {bulk ? (
+              <>
+                <textarea
+                  className="field"
+                  rows={6}
+                  value={bulkText}
+                  onChange={(e) => setBulkText(e.target.value)}
+                  placeholder={"One word or sentence per line\naccomplish\n图书馆\nshi1 zi"}
+                  aria-label="Words, one per line"
+                />
+                <div className="row-end">
+                  <button className="btn btn-honey" onClick={addBulk} disabled={!bulkText.trim() || room <= 0}>
+                    Add all
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="add-row">
+                  <div className="field-wrap">
+                    <input
+                      className="field"
+                      type="text"
+                      value={text}
+                      onChange={(e) => setText(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.nativeEvent.isComposing) addOne();
+                      }}
+                      placeholder="Word, 中文 or pinyin (shi1 zi)"
+                      aria-label="Word or sentence"
+                    />
+                    {trimmed && <LangTag text={trimmed} />}
+                  </div>
+                  <button className="btn btn-honey" onClick={addOne} disabled={!trimmed || room <= 0}>
+                    Add
+                  </button>
+                </div>
+                {trimmed && describe(trimmed).kind === "pinyin" && (
+                  <p className="preview">
+                    Shows as <strong>{describe(trimmed).display}</strong>
+                  </p>
+                )}
+                {trimmed && badPinyin(trimmed) && (
+                  <p className="warn">That isn't valid pinyin yet. Check each syllable, e.g. shi1 zi.</p>
+                )}
+                <p className="hint">
+                  Pinyin: add tone numbers (shi1 zi, lv4 se4) or tone marks (shī zi). Long sentences are
+                  read 4 words, characters or syllables at a time.
+                </p>
+              </>
+            )}
+            {room <= 0 && <p className="warn">Your list is full ({MAX_ITEMS} words).</p>}
+            {note && <p className="note">{note}</p>}
           </div>
 
-          <p className="label">Order</p>
-          <div className="seg">
-            <button
-              className={settings.order === "sequence" ? "on" : ""}
-              onClick={() => setSettings({ ...settings, order: "sequence" })}
-            >
-              In sequence
-            </button>
-            <button
-              className={settings.order === "random" ? "on" : ""}
-              onClick={() => setSettings({ ...settings, order: "random" })}
-            >
-              Random
-            </button>
+          <div className="card">
+            <div className="card-head">
+              <h2>
+                <span aria-hidden="true">🧺</span> Spelling list
+                {listName && queue.length > 0 && <span className="list-name"> · {listName}</span>}
+              </h2>
+              <span className={queue.length >= MAX_ITEMS ? "pill pill-coral" : "pill pill-outline"}>
+                {queue.length}/{MAX_ITEMS}
+              </span>
+            </div>
+
+            {queue.length === 0 ? (
+              <p className="empty">Your list is empty. Add some words above, or load a saved list.</p>
+            ) : (
+              <ol className="queue">
+                {queue.map((q, i) => (
+                  <li
+                    key={q.id}
+                    draggable
+                    onDragStart={(e) => {
+                      setDragFrom(i);
+                      e.dataTransfer.effectAllowed = "move";
+                      e.dataTransfer.setData("text/plain", String(i));
+                    }}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      if (dragOver !== i) setDragOver(i);
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      if (dragFrom !== null) move(dragFrom, i);
+                      setDragFrom(null);
+                      setDragOver(null);
+                    }}
+                    onDragEnd={() => {
+                      setDragFrom(null);
+                      setDragOver(null);
+                    }}
+                    className={
+                      dragFrom === i ? "dragging" : dragOver === i && dragFrom !== null ? "drop-target" : ""
+                    }
+                  >
+                    <span className="handle" aria-hidden="true" title="Drag to reorder">
+                      ⠿
+                    </span>
+                    <span className="num">{i + 1}</span>
+                    <span className="q-text" lang={describe(q.text).kind === "zh" ? "zh-CN" : undefined}>
+                      {describe(q.text).display}
+                    </span>
+                    <LangTag text={q.text} />
+                    <span className="q-actions">
+                      <button
+                        className="icon-btn"
+                        aria-label={`Move ${q.text} up`}
+                        disabled={i === 0}
+                        onClick={() => move(i, i - 1)}
+                      >
+                        ↑
+                      </button>
+                      <button
+                        className="icon-btn"
+                        aria-label={`Move ${q.text} down`}
+                        disabled={i === queue.length - 1}
+                        onClick={() => move(i, i + 1)}
+                      >
+                        ↓
+                      </button>
+                      <button className="icon-btn icon-remove" aria-label={`Remove ${q.text}`} onClick={() => removeOne(q.id)}>
+                        ×
+                      </button>
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            )}
+
+            {queue.length > 0 && (
+              <>
+                <div className="save-row">
+                  <input
+                    className="field"
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder={listName ? `Save as "${listName}" or type a new name` : "Name this list, e.g. Week 4 Spelling"}
+                    aria-label="List name"
+                  />
+                  <button className="btn btn-sky" onClick={saveList}>
+                    💾 Save list
+                  </button>
+                </div>
+                <div className="row-end">
+                  <button
+                    className="btn btn-sm btn-plain"
+                    onClick={() => {
+                      setQueue([]);
+                      setListName("");
+                    }}
+                  >
+                    Clear list
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </section>
+
+        {/* Pacing + start */}
+        <aside className="col">
+          <div className="card">
+            <div className="card-head">
+              <h2>
+                <span aria-hidden="true">🐾</span> Pacing Buddy
+              </h2>
+            </div>
+            <p className="hint">How fast should words be read?</p>
+            <div className="pace">
+              {PACES.map((p) => (
+                <button
+                  key={p.rate}
+                  className={settings.rate === p.rate ? "pace-btn on" : "pace-btn"}
+                  aria-pressed={settings.rate === p.rate}
+                  onClick={() => setSettings({ ...settings, rate: p.rate })}
+                >
+                  <span className="pace-icon" aria-hidden="true">
+                    {p.icon}
+                  </span>
+                  <strong>{p.label}</strong>
+                  <small>{p.rate.toFixed(2).replace(/0$/, "")}x</small>
+                </button>
+              ))}
+            </div>
+
+            <p className="label">Word order</p>
+            <div className="chips">
+              <button
+                className={settings.order === "sequence" ? "chip on" : "chip"}
+                aria-pressed={settings.order === "sequence"}
+                onClick={() => setSettings({ ...settings, order: "sequence" })}
+              >
+                ➡️ In order
+              </button>
+              <button
+                className={settings.order === "random" ? "chip on" : "chip"}
+                aria-pressed={settings.order === "random"}
+                onClick={() => setSettings({ ...settings, order: "random" })}
+              >
+                🔀 Mix them up
+              </button>
+            </div>
           </div>
 
-        </div>
-
-        <div className="card start-card">
-          <h2>Ready?</h2>
-          <p className="muted">
-            Get paper and a pen. Words are hidden while you practise and revealed at the end.
-          </p>
-          {error && <p className="warn">{error}</p>}
-          <button
-            className="primary big"
-            onClick={onStart}
-            disabled={queue.length === 0 || queue.length > MAX_ITEMS}
-          >
-            Start spelling practice
-          </button>
-        </div>
-      </aside>
+          <div className="card start-card">
+            <span className="start-icon" aria-hidden="true">
+              🚀
+            </span>
+            <h2>Ready to spell?</h2>
+            <p className="hint">The words stay secret until the end. Then you check your notebook!</p>
+            {error && <p className="warn">{error}</p>}
+            <button
+              className="btn btn-honey btn-lg btn-block"
+              onClick={onStart}
+              disabled={queue.length === 0 || queue.length > MAX_ITEMS}
+            >
+              Start Adventure!
+            </button>
+          </div>
+        </aside>
+      </div>
     </div>
   );
 }
-

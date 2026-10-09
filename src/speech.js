@@ -79,3 +79,14 @@ export function speak(text, lang, voices, rate) {
   // Short delay: some browsers drop speech queued right after cancel().
   timer = setTimeout(() => window.speechSynthesis.speak(utter), 60);
 }
+
+// True while the browser is speaking (polled; speechSynthesis has no global events).
+export function useSpeaking() {
+  const [speaking, setSpeaking] = useState(false);
+  useEffect(() => {
+    if (!speechSupported) return undefined;
+    const t = setInterval(() => setSpeaking(window.speechSynthesis.speaking), 200);
+    return () => clearInterval(t);
+  }, []);
+  return speaking;
+}
