@@ -24,7 +24,8 @@ const norm = (l) => (l || "").toLowerCase().replace("_", "-");
 
 // Chinese: first Mainland Mandarin voice (original behaviour).
 // Chinese: first Mainland Mandarin voice (original behaviour).
-// English: Jamie (Premium, en-GB) first, then Daniel (en-GB); then another British,
+// English: Matilda (Premium, en-AU) first, then Jamie (Premium, en-GB), then Daniel
+// (en-GB); then another British,
 // then any English voice on devices that have neither (e.g. Windows, Android).
 // Safari may name a voice "Jamie (Premium)" or just "Jamie", so the quality tier is
 // also read from voiceURI (e.g. com.apple.voice.premium.en-GB.Jamie).
@@ -52,6 +53,7 @@ export function pickVoice(voices, lang) {
   }
   const isEn = (v) => norm(v.lang).startsWith("en");
   return (
+    best(voices, "matilda") ||
     best(voices, "jamie") ||
     best(voices, "daniel") ||
     voices.find((v) => norm(v.lang) === "en-gb") ||
