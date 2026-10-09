@@ -23,8 +23,24 @@ export function useVoices() {
 const norm = (l) => (l || "").toLowerCase().replace("_", "-");
 
 // Chinese: first Mainland Mandarin voice (original behaviour).
-// English: fixed to Daniel (en-GB); falls back to another British, then any English voice
-// on devices that do not have Daniel (e.g. Windows, Android).
+// Chinese: first Mainland Mandarin voice (original behaviour).
+// English: Jamie (Premium, en-GB) first, then Daniel (en-GB); then another British,
+// then any English voice on devices that have neither (e.g. Windows, Android).
+// Safari may name a voice "Jamie (Premium)" or just "Jamie", so the quality tier is
+// also read from voiceURI (e.g. com.apple.voice.premium.en-GB.Jamie).
+const tier = (v) => {
+  const id = `${v.name || ""} ${v.voiceURI || ""}`;
+  if (/premium/i.test(id)) return 2;
+  if (/enhanced/i.test(id)) return 1;
+  return 0;
+};
+
+function best(voices, name) {
+  const re = new RegExp(`\\b${name}\\b`, "i");
+  const matches = voices.filter((v) => norm(v.lang).startsWith("en") && re.test(v.name || ""));
+  return matches.sort((x, y) => tier(y) - tier(x))[0] || null;
+}
+
 export function pickVoice(voices, lang) {
   if (lang === "zh-CN") {
     const isZh = (v) => norm(v.lang).startsWith("zh") || norm(v.lang).startsWith("cmn");
@@ -35,14 +51,9 @@ export function pickVoice(voices, lang) {
     );
   }
   const isEn = (v) => norm(v.lang).startsWith("en");
-  const daniels = voices.filter((v) => isEn(v) && /\bdaniel\b/i.test(v.name || ""));
-  const daniel =
-    daniels.find((v) => /premium/i.test(v.name)) ||
-    daniels.find((v) => /enhanced/i.test(v.name)) ||
-    daniels.find((v) => norm(v.lang) === "en-gb") ||
-    daniels[0];
   return (
-    daniel ||
+    best(voices, "jamie") ||
+    best(voices, "daniel") ||
     voices.find((v) => norm(v.lang) === "en-gb") ||
     voices.find((v) => norm(v.lang) === "en-us") ||
     voices.find(isEn) ||
