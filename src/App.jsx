@@ -155,6 +155,7 @@ export default function App() {
             setListName={setListName}
             settings={settings}
             setSettings={setSettings}
+            voices={voices}
             error={error}
             clearError={() => setError("")}
             onStart={() => start(queue.map((q) => q.text), listName)}
