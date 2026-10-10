@@ -2,7 +2,6 @@ import { useRef, useState } from "react";
 import { MAX_ITEMS, describe, parseItems, uid } from "./text.js";
 import { looksLikePinyin } from "./pinyin.js";
 import { parseBackup, parseHistoryBackup } from "./storage.js";
-import { pickVoice, speak } from "./speech.js";
 
 export const PACES = [
   { rate: 0.75, label: "Slow", icon: "🐢" },
@@ -34,7 +33,6 @@ export default function Setup({
   setListName,
   settings,
   setSettings,
-  voices,
   error,
   clearError,
   onStart,
@@ -460,8 +458,6 @@ export default function Setup({
               ))}
             </div>
 
-            <VoiceCheck voices={voices} rate={settings.rate} />
-
             <p className="label">Word order</p>
             <div className="chips">
               <button
@@ -498,48 +494,6 @@ export default function Setup({
           </div>
         </aside>
       </div>
-    </div>
-  );
-}
-
-// Shows which voices this device offers to the browser, so a missing or
-// still-downloading voice (e.g. Matilda Premium) is easy to spot.
-function VoiceCheck({ voices, rate }) {
-  const [open, setOpen] = useState(false);
-  const en = pickVoice(voices, "en");
-  const zh = pickVoice(voices, "zh-CN");
-  const english = voices
-    .filter((v) => (v.lang || "").toLowerCase().replace("_", "-").startsWith("en"))
-    .sort((a, b) => a.name.localeCompare(b.name));
-  return (
-    <div className="voice-check">
-      <p className="hint">
-        English voice: <strong>{en ? en.name : "none found"}</strong>
-        <br />
-        Chinese voice: <strong>{zh ? zh.name : "none found"}</strong>
-      </p>
-      <div className="voice-check-actions">
-        <button className="btn btn-sm" onClick={() => speak("Hello! Let's practise spelling. Accomplish.", "en", voices, rate)}>
-          🔊 Test English
-        </button>
-        <button className="btn btn-sm" onClick={() => speak("你好！图书馆。", "zh-CN", voices, rate)}>
-          🔊 Test 中文
-        </button>
-      </div>
-      <button className="btn btn-sm btn-plain" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
-        {open ? "Hide voice list" : `Voices on this device (${english.length} English)`}
-      </button>
-      {open && (
-        <ul className="voice-list">
-          {english.length === 0 && <li>No English voices found.</li>}
-          {english.map((v) => (
-            <li key={v.voiceURI || v.name} className={en && v === en ? "in-use" : ""}>
-              {v.name} <small>({v.lang})</small>
-              {en && v === en ? " ← in use" : ""}
-            </li>
-          ))}
-        </ul>
-      )}
     </div>
   );
 }

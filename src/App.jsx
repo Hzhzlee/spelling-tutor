@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { MAX_ITEMS, describe, shuffle, uid } from "./text.js";
-import { pickVoice, speechSupported, stopSpeaking, useVoices } from "./speech.js";
+import { pickVoice, speechSupported, stopSpeaking, useCloud, useVoices } from "./speech.js";
 import { requestPersistence, useStored } from "./storage.js";
 import Setup from "./Setup.jsx";
 import Practice from "./Practice.jsx";
@@ -34,6 +34,7 @@ function buildLog(session, marks) {
 
 export default function App() {
   const voices = useVoices();
+  const cloud = useCloud();
   const [lists, setLists] = useStored("spellwise.lists.v1", []);
   const [queue, setQueue] = useStored("spellwise.queue.v1", []);
   const [listName, setListName] = useStored("spellwise.listname.v1", "");
@@ -61,16 +62,20 @@ export default function App() {
       setError(`Please keep the list to ${MAX_ITEMS} words or fewer.`);
       return false;
     }
-    if (!speechSupported) {
+    const items = texts.map((text) => ({ id: uid(), text, ...describe(text) }));
+    // With the cloud voice on, device voices are only a backup, so don't block on them.
+    const deviceNeeded = cloud.status !== "on";
+    if (deviceNeeded && !speechSupported) {
       setError("This browser cannot read words aloud. Try Chrome, Edge or Safari.");
       return false;
     }
-    if (voices.length === 0) {
+    if (deviceNeeded && voices.length === 0) {
       setError("The voices are still loading. Please try again in a moment.");
       return false;
     }
-    const items = texts.map((text) => ({ id: uid(), text, ...describe(text) }));
-    const missing = [...new Set(items.map((i) => i.lang))].filter((l) => !pickVoice(voices, l));
+    const missing = deviceNeeded
+      ? [...new Set(items.map((i) => i.lang))].filter((l) => !pickVoice(voices, l))
+      : [];
     if (missing.length > 0) {
       const names = missing.map((l) => (l === "zh-CN" ? "Chinese (Simplified)" : "English"));
       setError(`No ${names.join(" or ")} voice is installed on this device.`);
@@ -155,7 +160,6 @@ export default function App() {
             setListName={setListName}
             settings={settings}
             setSettings={setSettings}
-            voices={voices}
             error={error}
             clearError={() => setError("")}
             onStart={() => start(queue.map((q) => q.text), listName)}

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { speak, stopSpeaking, useSpeaking } from "./speech.js";
+import { prefetch, speak, stopSpeaking, useSpeaking } from "./speech.js";
 import { PACES } from "./Setup.jsx";
 
 export function SpeakerIcon({ size = 28 }) {
@@ -43,6 +43,13 @@ export default function Practice({ items, listName, voices, settings, setSetting
   useEffect(() => {
     speak(chunks[part], item.lang, voicesRef.current, rateRef.current);
   }, [chunks, part, tick, item.lang]);
+
+  // Fetch the rest of this item and the next item ahead of time (cloud voice only).
+  useEffect(() => {
+    chunks.slice(part + 1).forEach((c) => prefetch(c, item.lang, settings.rate));
+    const next = items[idx + 1];
+    if (next) next.chunks.forEach((c) => prefetch(c, next.lang, settings.rate));
+  }, [chunks, part, idx, items, item.lang, settings.rate]);
 
   useEffect(() => stopSpeaking, []);
 

@@ -1917,36 +1917,8 @@ textarea.field {
   }
 }
 
-/* Voice check */
-.voice-check {
-  margin-top: 16px;
-  padding-top: 12px;
-  border-top: 2px solid var(--line-soft);
-}
-
-.voice-check .hint {
-  margin-top: 0;
-}
-
-.voice-check-actions {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin: 10px 0 4px;
-}
-
-.voice-list {
-  margin: 6px 0 0;
-  padding: 10px 12px 10px 28px;
-  max-height: 220px;
-  overflow: auto;
-  border: 2px dashed #c2b8d4;
-  border-radius: var(--r);
-  font-size: 0.88rem;
-  font-weight: 600;
-}
-
-.voice-list .in-use {
-  color: var(--navy);
-  font-weight: 800;
+.pill-mint {
+  background: var(--mint-soft);
+  border-color: var(--mint-dark);
+  color: #0d5f57;
 }
